@@ -8,24 +8,28 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/venexene/wbl3-delayed-notifier/internal/config"
 )
 
-// Простой хендлер для проверки
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hello! Server is running. Time: %s", time.Now().Format(time.RFC1123))
 }
 
 func main() {
-	// Создание HTTP сервера
+  	cfg, err := config.Load()
+    if err != nil {
+        log.Fatalf("Failed to load config: %v", err)
+    }
+
 	router := http.NewServeMux()
 	router.HandleFunc("/test_server", testHandler)
 	
-	srv := &http.Server{
-		Addr:    ":8080",
+	srv := &http.Server {
+		Addr:    ":" + cfg.HTTPPort,
 		Handler: router,
 	}
 
-	// Запуск сервера в отдельной горутине
 	go func() {
 		log.Printf("Server starting on http://localhost%s\n", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -33,20 +37,16 @@ func main() {
 		}
 	}()
 
-	// Создание контекста для получения сигнала о завершении
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Ожидание сигнала завершения
 	<-ctx.Done()
-	stop() // Отмена подписки на сигнал
+	stop()
 	log.Println("Shutting down server...")
 	
-	// Создание контекста с таймаутом для корректного завершения
 	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	
-	// Закрытие сервера
 	if err := srv.Shutdown(ctxShutdown); err != nil {
 		log.Fatalf("Failed to shutdown server: %v", err)
 	}
