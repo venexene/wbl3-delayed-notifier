@@ -33,14 +33,13 @@ func main() {
 
 	rabbit, err := queue.New(cfg.RabbitURL)
 	if err != nil {
-		log.Fatalf("RabbitMQ error: %v", err)
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
 	router.GET("/test_server", testHandler)
-
 	router.POST("/notify", createNotification(db, rabbit))
 	router.GET("/notify/:id", getNotificationStatus(db))
 	router.DELETE("/notify/:id", cancelNotification(db))
@@ -145,7 +144,7 @@ func cancelNotification(db *storage.Postgres) gin.HandlerFunc {
 		}
 
 		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot cancel (not found or already processed)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot cancel"})
 			return
 		}
 

@@ -24,7 +24,7 @@ func getEnv(key string) (string, error) {
 
 func Load() (*Config, error) {
 	if err := godotenv.Load(); err != nil {
-		log.Println(".env not found, using system env")
+		log.Println(".env not found")
 	}
 
 	port := os.Getenv("HTTP_PORT") 
