@@ -14,82 +14,73 @@ type Config struct {
     RabbitURL string
 }
 
+func getEnv(key string) (string, error) {
+	val := os.Getenv(key)
+	if val == "" {
+		return "", fmt.Errorf("%s is required", key)
+	}
+	return val, nil
+}
+
 func Load() (*Config, error) {
-    err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		log.Println(".env not found, using system env")
 	}
-    
-    port := os.Getenv("HTTP_PORT")
-    if port == "" {
-        port = "8080"
-    }
-    
-    db_user := os.Getenv("DB_USER")
-    if db_user == "" {
-        return nil, fmt.Errorf("DB_USER is required")
+
+	port := os.Getenv("HTTP_PORT") 
+    if port == "" { 
+        port = "8080" 
     }
 
-    db_pass := os.Getenv("DB_PASSWORD")
-    if db_pass == "" {
-        return nil, fmt.Errorf("DB_PASSWORD is required")
-    }
+	dbUser, err := getEnv("DB_USER")
+	if err != nil {
+		return nil, err
+	}
+	dbPass, err := getEnv("DB_PASSWORD")
+	if err != nil {
+		return nil, err
+	}
+	dbHost, err := getEnv("DB_HOST")
+	if err != nil {
+		return nil, err
+	}
+	dbPort, err := getEnv("DB_PORT")
+	if err != nil {
+		return nil, err
+	}
+	dbName, err := getEnv("DB_NAME")
+	if err != nil {
+		return nil, err
+	}
 
-    db_host := os.Getenv("DB_HOST")
-    if db_host == "" {
-        return nil, fmt.Errorf("DB_HOST is required")
-    }
+	rbUser, err := getEnv("RABBIT_USER")
+	if err != nil {
+		return nil, err
+	}
+	rbPass, err := getEnv("RABBIT_PASSWORD")
+	if err != nil {
+		return nil, err
+	}
+	rbHost, err := getEnv("RABBIT_HOST")
+	if err != nil {
+		return nil, err
+	}
+	rbPort, err := getEnv("RABBIT_PORT")
+	if err != nil {
+		return nil, err
+	}
 
-    db_port := os.Getenv("DB_PORT")
-    if db_port == "" {
-        return nil, fmt.Errorf("DB_PORT is required")
-    }
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		dbUser, dbPass, dbHost, dbPort, dbName,
+	)
 
-    db_name := os.Getenv("DB_NAME")
-    if db_name == "" {
-        return nil, fmt.Errorf("DB_USER is required")
-    }
+	rurl := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+		rbUser, rbPass, rbHost, rbPort,
+	)
 
-    rb_user := os.Getenv("RABBIT_USER")
-    if rb_user == "" {
-        return nil, fmt.Errorf("RABBIT_USER is required")
-    }
-
-    rb_pass := os.Getenv("RABBIT_PASSWORD")
-    if rb_pass == "" {
-        return nil, fmt.Errorf("RABBIT_PASSWORD is required")
-    }
-
-    rb_host := os.Getenv("RABBIT_HOST")
-    if rb_host == "" {
-        return nil, fmt.Errorf("RABBIT_HOST is required")
-    }
-
-    rb_port := os.Getenv("RABBIT_PORT")
-    if rb_port == "" {
-        return nil, fmt.Errorf("RABBIT_PORT is required")
-    }
-
-    dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
-        db_user,
-        db_pass,
-        db_host,
-        db_port,
-        db_name,
-    )
-
-
-    rurl := fmt.Sprintf("amqp://%s:%s@%s:%s/",
-        rb_user,
-        rb_pass,
-        rb_host,
-        rb_port,
-    )
-
-    
-    return &Config{
-        HTTPPort: port,
-        DB_DSN: dsn,
-        RabbitURL: rurl,
-    }, nil
+	return &Config{
+		HTTPPort: port,
+		DB_DSN:   dsn,
+		RabbitURL: rurl,
+	}, nil
 }
