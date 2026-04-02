@@ -71,14 +71,22 @@ func (p *Postgres) GetByID(ctx context.Context, id string) (*Notification, error
 }
 
 
-func (p *Postgres) Cancel(ctx context.Context, id string) error {
-    query := `
-        UPDATE notifications
-        SET status = 'canceled'
-        WHERE id = $1
-    `
-    _, err := p.Pool.Exec(ctx, query, id)
-    return err
+func (p *Postgres) Cancel(ctx context.Context, id string) (bool, error) {
+	query := `
+		UPDATE notifications
+		SET status = 'canceled'
+		WHERE id = $1 AND status = 'pending'
+	`
+	res, err := p.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return false, err
+	}
+
+	if res.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 
@@ -119,4 +127,21 @@ func (p *Postgres) IncrementRetry(ctx context.Context, id string) error {
         WHERE id = $1
     `, id)
 	return err
+}
+
+func (p *Postgres) MarkFailed(ctx context.Context, id string) error {
+	_, err := p.Pool.Exec(ctx, 
+        `UPDATE notifications
+         SET status='failed'
+          WHERE id=$1`, id)
+	return err
+}
+
+func (p *Postgres) MarkProcessing(ctx context.Context, id string) error {
+    _, err := p.Pool.Exec(ctx, `
+        UPDATE notifications
+        SET status='processing'
+        WHERE id=$1 AND status='pending'
+    `, id)
+    return err
 }

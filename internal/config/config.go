@@ -35,6 +35,11 @@ func Load() (*Config, error) {
         return nil, fmt.Errorf("DB_PASSWORD is required")
     }
 
+    db_host := os.Getenv("DB_HOST")
+    if db_host == "" {
+        return nil, fmt.Errorf("DB_HOST is required")
+    }
+
     db_port := os.Getenv("DB_PORT")
     if db_port == "" {
         return nil, fmt.Errorf("DB_PORT is required")
@@ -43,11 +48,6 @@ func Load() (*Config, error) {
     db_name := os.Getenv("DB_NAME")
     if db_name == "" {
         return nil, fmt.Errorf("DB_USER is required")
-    }
-
-    rb_port := os.Getenv("RABBIT_PORT")
-    if rb_port == "" {
-        return nil, fmt.Errorf("RABBIT_PORT is required")
     }
 
     rb_user := os.Getenv("RABBIT_USER")
@@ -60,17 +60,29 @@ func Load() (*Config, error) {
         return nil, fmt.Errorf("RABBIT_PASSWORD is required")
     }
 
-    dsn := fmt.Sprintf("postgres://%s:%s@localhost:%s/%s",
+    rb_host := os.Getenv("RABBIT_HOST")
+    if rb_host == "" {
+        return nil, fmt.Errorf("RABBIT_HOST is required")
+    }
+
+    rb_port := os.Getenv("RABBIT_PORT")
+    if rb_port == "" {
+        return nil, fmt.Errorf("RABBIT_PORT is required")
+    }
+
+    dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
         db_user,
         db_pass,
+        db_host,
         db_port,
         db_name,
     )
 
 
-    rurl := fmt.Sprintf("amqp://%s:%s@localhost:%s/",
+    rurl := fmt.Sprintf("amqp://%s:%s@%s:%s/",
         rb_user,
         rb_pass,
+        rb_host,
         rb_port,
     )
 

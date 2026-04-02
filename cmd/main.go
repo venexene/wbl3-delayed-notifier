@@ -60,7 +60,7 @@ func main() {
 	ctxStop, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go rabbit.Consume(ctx, db)
+	go rabbit.Consume(ctxStop, db)
 
 	<-ctxStop.Done()
 	log.Println("Shutting down server...")
@@ -138,8 +138,14 @@ func cancelNotification(db *storage.Postgres) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		if err := db.Cancel(c, id); err != nil {
+		ok, err := db.Cancel(c, id)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot cancel (not found or already processed)"})
 			return
 		}
 
