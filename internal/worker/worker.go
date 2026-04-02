@@ -35,7 +35,7 @@ func processPendingNotifications(ctx context.Context, db *storage.Postgres) {
 	}
 
 	for _, n := range notifications {
-		err := sendNotification(n)
+		err := SendNotification(n)
 		if err != nil {
 			log.Printf("Worker: failed to send notification %s: %v", n.ID, err)
 			db.IncrementRetry(ctx, n.ID)
@@ -50,7 +50,7 @@ func processPendingNotifications(ctx context.Context, db *storage.Postgres) {
 }
 
 
-func sendNotification(n storage.Notification) error {
+func SendNotification(n storage.Notification) error {
 	log.Printf("Sending notification to %s: %s", n.Target, n.Message)
 	return nil
 }

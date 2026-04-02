@@ -13,7 +13,7 @@ import (
 
 	"github.com/venexene/wbl3-delayed-notifier/internal/config"
 	"github.com/venexene/wbl3-delayed-notifier/internal/storage"
-	"github.com/venexene/wbl3-delayed-notifier/internal/worker"
+	"github.com/venexene/wbl3-delayed-notifier/internal/queue"
 )
 
 
@@ -31,12 +31,17 @@ func main() {
 	}
 	defer db.Pool.Close()
 
+	rabbit, err := queue.New(cfg.RabbitURL)
+	if err != nil {
+		log.Fatalf("RabbitMQ error: %v", err)
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
 	router.GET("/test_server", testHandler)
 
-	router.POST("/notify", createNotification(db))
+	router.POST("/notify", createNotification(db, rabbit))
 	router.GET("/notify/:id", getNotificationStatus(db))
 	router.DELETE("/notify/:id", cancelNotification(db))
 
@@ -55,7 +60,7 @@ func main() {
 	ctxStop, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go worker.StartWorker(ctx, db)
+	go rabbit.Consume(ctx, db)
 
 	<-ctxStop.Done()
 	log.Println("Shutting down server...")
@@ -76,7 +81,7 @@ func testHandler(c *gin.Context) {
 }
 
 
-func createNotification(db *storage.Postgres) gin.HandlerFunc {
+func createNotification(db *storage.Postgres, q *queue.RabbitMQ) gin.HandlerFunc {
 	type CreateRequest struct {
 		Target  string    `json:"target"`
 		Message string    `json:"message"`
@@ -100,6 +105,11 @@ func createNotification(db *storage.Postgres) gin.HandlerFunc {
 		}
 
 		if err := db.Create(c, n); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := q.Publish(n); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
