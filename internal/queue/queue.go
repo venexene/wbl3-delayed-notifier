@@ -2,19 +2,21 @@ package queue
 
 import (
 	"context"
-	"log"
 	"encoding/json"
+	"log"
+	"strconv"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/venexene/wbl3-delayed-notifier/internal/storage"
-	"github.com/venexene/wbl3-delayed-notifier/internal/worker"
 )
 
 type RabbitMQ struct {
-	Conn    *amqp.Connection
-	Channel *amqp.Channel
-	Queue   amqp.Queue
+	Conn         *amqp.Connection
+	Channel      *amqp.Channel
+	MainQueue    amqp.Queue
+	DelayQueue   amqp.Queue
 }
 
 func New(url string) (*RabbitMQ, error) {
@@ -28,9 +30,9 @@ func New(url string) (*RabbitMQ, error) {
 		return nil, err
 	}
 
-	q, err := ch.QueueDeclare(
+	mainQueue, err := ch.QueueDeclare(
 		"notifications",
-		true, 
+		true,
 		false,
 		false,
 		false,
@@ -40,12 +42,28 @@ func New(url string) (*RabbitMQ, error) {
 		return nil, err
 	}
 
+	delayQueue, err := ch.QueueDeclare(
+		"notifications_delay",
+		true,
+		false,
+		false,
+		false,
+		amqp.Table{
+			"x-dead-letter-exchange":    "",
+			"x-dead-letter-routing-key": mainQueue.Name,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	log.Println("RabbitMQ connected")
 
 	return &RabbitMQ{
-		Conn:    conn,
-		Channel: ch,
-		Queue:   q,
+		Conn:       conn,
+		Channel:    ch,
+		MainQueue:  mainQueue,
+		DelayQueue: delayQueue,
 	}, nil
 }
 
@@ -56,14 +74,20 @@ func (r *RabbitMQ) Publish(n storage.Notification) error {
 		return err
 	}
 
+	delay := time.Until(n.SendAt)
+	if delay < 0 {
+		delay = 0
+	}
+
 	return r.Channel.Publish(
 		"",
-		r.Queue.Name,
+		r.DelayQueue.Name,
 		false,
 		false,
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        body,
+			Expiration:  strconv.FormatInt(delay.Milliseconds(), 10),
 		},
 	)
 }
@@ -71,7 +95,7 @@ func (r *RabbitMQ) Publish(n storage.Notification) error {
 
 func (r *RabbitMQ) Consume(ctx context.Context, db *storage.Postgres) {
 	msgs, err := r.Channel.Consume(
-		r.Queue.Name,
+		r.MainQueue.Name,
 		"",
 		false,
 		false,
@@ -99,11 +123,22 @@ func (r *RabbitMQ) Consume(ctx context.Context, db *storage.Postgres) {
 				continue
 			}
 
-			err = worker.SendNotification(n)
+			current, err := db.GetByID(ctx, n.ID)
 			if err != nil {
-				log.Println("Failed to send, retry later")
+				msg.Ack(false)
+				continue
+			}
+
+			if current.Status == "canceled" || current.Status == "sent" {
+				msg.Ack(false)
+				continue
+			}
+
+			err = sendNotification(n)
+			if err != nil {
+				log.Println("Failed to send, retry later (no delay yet)")
 				db.IncrementRetry(ctx, n.ID)
-				msg.Nack(false, true) // вернуть в очередь
+				msg.Nack(false, true)
 				continue
 			}
 
@@ -111,4 +146,9 @@ func (r *RabbitMQ) Consume(ctx context.Context, db *storage.Postgres) {
 			msg.Ack(false)
 		}
 	}
+}
+
+func sendNotification(n storage.Notification) error {
+	log.Printf("Sending notification to %s: %s", n.Target, n.Message)
+	return nil
 }
